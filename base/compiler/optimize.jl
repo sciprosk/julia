@@ -23,15 +23,14 @@ const IR_FLAG_INBOUNDS    = 0x01 << 0
 const IR_FLAG_INLINE      = 0x01 << 1
 # This statement is marked as @noinline by user
 const IR_FLAG_NOINLINE    = 0x01 << 2
-const IR_FLAG_THROW_BLOCK = 0x01 << 3
 # This statement may be removed if its result is unused. In particular,
 # it must be both :effect_free and :nothrow.
 # TODO: Separate these out.
-const IR_FLAG_EFFECT_FREE = 0x01 << 4
+const IR_FLAG_EFFECT_FREE = 0x01 << 3
 # This statement was proven not to throw
-const IR_FLAG_NOTHROW     = 0x01 << 5
+const IR_FLAG_NOTHROW     = 0x01 << 4
 # This is :consistent
-const IR_FLAG_CONSISTENT  = 0x01 << 6
+const IR_FLAG_CONSISTENT  = 0x01 << 5
 
 const TOP_TUPLE = GlobalRef(Core, :tuple)
 
@@ -229,7 +228,6 @@ _topmod(sv::OptimizationState) = _topmod(sv.mod)
 
 is_stmt_inline(stmt_flag::UInt8)      = stmt_flag & IR_FLAG_INLINE      ≠ 0
 is_stmt_noinline(stmt_flag::UInt8)    = stmt_flag & IR_FLAG_NOINLINE    ≠ 0
-is_stmt_throw_block(stmt_flag::UInt8) = stmt_flag & IR_FLAG_THROW_BLOCK ≠ 0
 
 """
     stmt_effect_flags(stmt, rt, src::Union{IRCode,IncrementalCompact}) ->
@@ -654,7 +652,7 @@ plus_saturate(x::Int, y::Int) = max(x, y, x+y)
 isknowntype(@nospecialize T) = (T === Union{}) || isa(T, Const) || isconcretetype(widenconst(T))
 
 function statement_cost(ex::Expr, line::Int, src::Union{CodeInfo, IRCode}, sptypes::Vector{VarState},
-                        union_penalties::Bool, params::OptimizationParams, error_path::Bool = false)
+                        union_penalties::Bool, params::OptimizationParams)
     head = ex.head
     if is_meta_expr_head(head)
         return 0
@@ -689,7 +687,7 @@ function statement_cost(ex::Expr, line::Int, src::Union{CodeInfo, IRCode}, sptyp
                 return 0
             elseif (f === Core.arrayref || f === Core.const_arrayref || f === Core.arrayset) && length(ex.args) >= 3
                 atyp = argextype(ex.args[3], src, sptypes)
-                return isknowntype(atyp) ? 4 : error_path ? params.inline_error_path_cost : params.inline_nonleaf_penalty
+                return isknowntype(atyp) ? 4 : params.inline_nonleaf_penalty
             elseif f === typeassert && isconstType(widenconst(argextype(ex.args[3], src, sptypes)))
                 return 1
             elseif f === Core.isa
@@ -712,7 +710,7 @@ function statement_cost(ex::Expr, line::Int, src::Union{CodeInfo, IRCode}, sptyp
         if extyp === Union{}
             return 0
         end
-        return error_path ? params.inline_error_path_cost : params.inline_nonleaf_penalty
+        return params.inline_nonleaf_penalty
     elseif head === :foreigncall || head === :invoke || head === :invoke_modify
         # Calls whose "return type" is Union{} do not actually return:
         # they are errors. Since these are not part of the typical
@@ -729,7 +727,7 @@ function statement_cost(ex::Expr, line::Int, src::Union{CodeInfo, IRCode}, sptyp
         end
         a = ex.args[2]
         if a isa Expr
-            cost = plus_saturate(cost, statement_cost(a, -1, src, sptypes, union_penalties, params, error_path))
+            cost = plus_saturate(cost, statement_cost(a, -1, src, sptypes, union_penalties, params))
         end
         return cost
     elseif head === :copyast
@@ -749,8 +747,7 @@ function statement_or_branch_cost(@nospecialize(stmt), line::Int, src::Union{Cod
     thiscost = 0
     dst(tgt) = isa(src, IRCode) ? first(src.cfg.blocks[tgt].stmts) : tgt
     if stmt isa Expr
-        thiscost = statement_cost(stmt, line, src, sptypes, union_penalties, params,
-                                  is_stmt_throw_block(isa(src, IRCode) ? src.stmts.flag[line] : src.ssaflags[line]))::Int
+        thiscost = statement_cost(stmt, line, src, sptypes, union_penalties, params)::Int
     elseif stmt isa GotoNode
         # loops are generally always expensive
         # but assume that forward jumps are already counted for from

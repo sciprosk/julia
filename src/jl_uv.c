@@ -119,7 +119,7 @@ _Atomic(int) jl_uv_n_waiters = 0;
 
 void JL_UV_LOCK(void)
 {
-    if (jl_mutex_trylock(&jl_uv_mutex)) {
+    if (jl_spin_mutex_trylock(&jl_uv_mutex)) {
     }
     else {
         jl_atomic_fetch_add_relaxed(&jl_uv_n_waiters, 1);
@@ -273,7 +273,7 @@ JL_DLLEXPORT int jl_process_events(void)
     uv_loop_t *loop = jl_io_loop;
     jl_gc_safepoint_(ct->ptls);
     if (loop && (jl_atomic_load_relaxed(&_threadedregion) || jl_atomic_load_relaxed(&ct->tid) == 0)) {
-        if (jl_atomic_load_relaxed(&jl_uv_n_waiters) == 0 && jl_mutex_trylock(&jl_uv_mutex)) {
+        if (jl_atomic_load_relaxed(&jl_uv_n_waiters) == 0 && jl_spin_mutex_trylock(&jl_uv_mutex)) {
             JL_PROBE_RT_START_PROCESS_EVENTS(ct);
             loop->stop_flag = 0;
             uv_ref((uv_handle_t*)&signal_async); // force the loop alive

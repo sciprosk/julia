@@ -15,20 +15,20 @@ extern "C" {
 // The JL_LOCK* and JL_UNLOCK* macros are no-op for non-threading build
 // while the jl_mutex_* functions are always locking and unlocking the locks.
 
-JL_DLLEXPORT void _jl_mutex_init(jl_mutex_t *lock, const char *name) JL_NOTSAFEPOINT;
-JL_DLLEXPORT void _jl_mutex_wait(jl_task_t *self, jl_mutex_t *lock, int safepoint);
-JL_DLLEXPORT void _jl_mutex_lock(jl_task_t *self, jl_mutex_t *lock);
-JL_DLLEXPORT int _jl_mutex_trylock_nogc(jl_task_t *self, jl_mutex_t *lock) JL_NOTSAFEPOINT;
-JL_DLLEXPORT int _jl_mutex_trylock(jl_task_t *self, jl_mutex_t *lock);
-JL_DLLEXPORT void _jl_mutex_unlock(jl_task_t *self, jl_mutex_t *lock);
-JL_DLLEXPORT void _jl_mutex_unlock_nogc(jl_mutex_t *lock) JL_NOTSAFEPOINT;
+JL_DLLEXPORT void _jl_mutex_init(jl_spin_mutex_t *lock, const char *name) JL_NOTSAFEPOINT;
+JL_DLLEXPORT void _jl_mutex_wait(jl_task_t *self, jl_spin_mutex_t *lock, int safepoint);
+JL_DLLEXPORT void _jl_mutex_lock(jl_task_t *self, jl_spin_mutex_t *lock);
+JL_DLLEXPORT int _jl_mutex_trylock_nogc(jl_task_t *self, jl_spin_mutex_t *lock) JL_NOTSAFEPOINT;
+JL_DLLEXPORT int _jl_mutex_trylock(jl_task_t *self, jl_spin_mutex_t *lock);
+JL_DLLEXPORT void _jl_mutex_unlock(jl_task_t *self, jl_spin_mutex_t *lock);
+JL_DLLEXPORT void _jl_mutex_unlock_nogc(jl_spin_mutex_t *lock) JL_NOTSAFEPOINT;
 
-static inline void jl_mutex_wait(jl_mutex_t *lock, int safepoint)
+static inline void jl_mutex_wait(jl_spin_mutex_t *lock, int safepoint)
 {
     _jl_mutex_wait(jl_current_task, lock, safepoint);
 }
 
-static inline void jl_mutex_lock_nogc(jl_mutex_t *lock) JL_NOTSAFEPOINT JL_NOTSAFEPOINT_ENTER
+static inline void jl_mutex_lock_nogc(jl_spin_mutex_t *lock) JL_NOTSAFEPOINT JL_NOTSAFEPOINT_ENTER
 {
 #ifndef __clang_gcanalyzer__
     // Hide this body from the analyzer, otherwise it complains that we're calling
@@ -60,32 +60,32 @@ static inline void jl_mutex_lock_nogc(jl_mutex_t *lock) JL_NOTSAFEPOINT JL_NOTSA
         }                                       \
     } while (0)
 
-static inline void jl_mutex_lock(jl_mutex_t *lock)
+static inline void jl_mutex_lock(jl_spin_mutex_t *lock)
 {
     _jl_mutex_lock(jl_current_task, lock);
 }
 
-static inline int jl_mutex_trylock_nogc(jl_mutex_t *lock) JL_NOTSAFEPOINT JL_NOTSAFEPOINT_ENTER
+static inline int jl_mutex_trylock_nogc(jl_spin_mutex_t *lock) JL_NOTSAFEPOINT JL_NOTSAFEPOINT_ENTER
 {
     return _jl_mutex_trylock_nogc(jl_current_task, lock);
 }
 
-static inline int jl_mutex_trylock(jl_mutex_t *lock)
+static inline int jl_mutex_trylock(jl_spin_mutex_t *lock)
 {
     return _jl_mutex_trylock(jl_current_task, lock);
 }
 
-static inline void jl_mutex_unlock(jl_mutex_t *lock)
+static inline void jl_mutex_unlock(jl_spin_mutex_t *lock)
 {
     _jl_mutex_unlock(jl_current_task, lock);
 }
 
-static inline void jl_mutex_unlock_nogc(jl_mutex_t *lock) JL_NOTSAFEPOINT JL_NOTSAFEPOINT_LEAVE
+static inline void jl_mutex_unlock_nogc(jl_spin_mutex_t *lock) JL_NOTSAFEPOINT JL_NOTSAFEPOINT_LEAVE
 {
     _jl_mutex_unlock_nogc(lock);
 }
 
-static inline void jl_mutex_init(jl_mutex_t *lock, const char *name) JL_NOTSAFEPOINT
+static inline void jl_mutex_init(jl_spin_mutex_t *lock, const char *name) JL_NOTSAFEPOINT
 {
     _jl_mutex_init(lock, name);
 }

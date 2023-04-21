@@ -25,7 +25,7 @@ using namespace llvm;
 
 // map from user-specified lib names to handles
 static std::map<std::string, void*> libMap;
-static jl_mutex_t libmap_lock;
+static jl_spin_mutex_t libmap_lock;
 extern "C"
 void *jl_get_library_(const char *f_lib, int throw_err)
 {

@@ -126,11 +126,11 @@ JL_DLLEXPORT void jl_gc_set_cb_notify_external_free(jl_gc_cb_notify_external_fre
 // For accessing `ptls->finalizers`, the lock is needed if a thread
 // is going to realloc the buffer (of its own list) or accessing the
 // list of another thread
-static jl_mutex_t finalizers_lock;
+static jl_spin_mutex_t finalizers_lock;
 static uv_mutex_t gc_cache_lock;
 
 // mutex for gc-heap-snapshot.
-jl_mutex_t heapsnapshot_lock;
+jl_spin_mutex_t heapsnapshot_lock;
 
 // Flag that tells us whether we need to support conservative marking
 // of objects.

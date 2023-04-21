@@ -106,7 +106,7 @@ void jl_wake_libuv(void)
     uv_async_send(&signal_async);
 }
 
-jl_mutex_t jl_uv_mutex;
+jl_spin_mutex_t jl_uv_mutex;
 
 void jl_init_uv(void)
 {

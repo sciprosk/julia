@@ -2325,7 +2325,7 @@ jl_code_instance_t *jl_method_compiled(jl_method_instance_t *mi, size_t world)
     return NULL;
 }
 
-jl_mutex_t precomp_statement_out_lock;
+jl_spin_mutex_t precomp_statement_out_lock;
 
 static void record_precompile_statement(jl_method_instance_t *mi)
 {

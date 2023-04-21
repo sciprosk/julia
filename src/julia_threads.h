@@ -120,7 +120,7 @@ struct _jl_task_t;
 typedef struct {
     _Atomic(struct _jl_task_t*) owner;
     uint32_t count;
-} jl_mutex_t;
+} jl_spin_mutex_t;
 
 typedef struct {
     jl_taggedvalue_t *freelist;   // root of list of free objects

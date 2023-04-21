@@ -31,7 +31,7 @@ JL_DLLEXPORT int jl_lineno = 0; // need to update jl_critical_error if this is T
 JL_DLLEXPORT const char *jl_filename = "none"; // need to update jl_critical_error if this is TLS
 
 htable_t jl_current_modules;
-jl_mutex_t jl_modules_mutex;
+jl_spin_mutex_t jl_modules_mutex;
 
 // During incremental compilation, the following gets set
 JL_DLLEXPORT jl_module_t *jl_precompile_toplevel_module = NULL;   // the toplevel module currently being defined

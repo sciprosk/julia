@@ -121,7 +121,7 @@ struct HeapSnapshot {
 // when snapshotting is on.
 int gc_heap_snapshot_enabled = 0;
 HeapSnapshot *g_snapshot = nullptr;
-extern jl_mutex_t heapsnapshot_lock;
+extern jl_spin_mutex_t heapsnapshot_lock;
 
 void serialize_heap_snapshot(ios_t *stream, HeapSnapshot &snapshot, char all_one);
 static inline void _record_gc_edge(const char *edge_type,

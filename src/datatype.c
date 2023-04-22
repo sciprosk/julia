@@ -53,7 +53,7 @@ JL_DLLEXPORT jl_methtable_t *jl_new_method_table(jl_sym_t *name, jl_module_t *mo
     jl_atomic_store_relaxed(&mt->cache, jl_nothing);
     jl_atomic_store_relaxed(&mt->max_args, 0);
     mt->backedges = NULL;
-    JL_MUTEX_INIT(&mt->writelock, "methodtable->writelock");
+    JL_SPIN_MUTEX_INIT(&mt->writelock, "methodtable->writelock");
     mt->offs = 0;
     mt->frozen = 0;
     return mt;
@@ -1527,12 +1527,12 @@ JL_DLLEXPORT jl_value_t *jl_new_struct_uninit(jl_datatype_t *type)
 
 JL_DLLEXPORT void jl_lock_value(jl_value_t *v) JL_NOTSAFEPOINT
 {
-    JL_LOCK_NOGC((jl_spin_mutex_t*)v);
+    JL_SPIN_LOCK_NOGC((jl_spin_mutex_t*)v);
 }
 
 JL_DLLEXPORT void jl_unlock_value(jl_value_t *v) JL_NOTSAFEPOINT
 {
-    JL_UNLOCK_NOGC((jl_spin_mutex_t*)v);
+    JL_SPIN_UNLOCK_NOGC((jl_spin_mutex_t*)v);
 }
 
 JL_DLLEXPORT int jl_field_index(jl_datatype_t *t, jl_sym_t *fld, int err)

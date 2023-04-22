@@ -180,7 +180,7 @@ static uv_loop_t *const unused_uv_loop_arg = (uv_loop_t *)0xBAD10;
 extern jl_spin_mutex_t jl_uv_mutex;
 extern _Atomic(int) jl_uv_n_waiters;
 void JL_UV_LOCK(void);
-#define JL_UV_UNLOCK() JL_UNLOCK(&jl_uv_mutex)
+#define JL_UV_UNLOCK() JL_SPIN_UNLOCK(&jl_uv_mutex)
 
 #ifdef __cplusplus
 extern "C" {

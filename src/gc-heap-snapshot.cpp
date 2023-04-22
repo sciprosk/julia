@@ -135,7 +135,7 @@ JL_DLLEXPORT void jl_gc_take_heap_snapshot(ios_t *stream, char all_one)
     HeapSnapshot snapshot;
     _add_internal_root(&snapshot);
 
-    jl_spin_mutex_lock(&heapsnapshot_lock);
+    JL_SPIN_LOCK(&heapsnapshot_lock);
 
     // Enable snapshotting
     g_snapshot = &snapshot;
@@ -148,7 +148,7 @@ JL_DLLEXPORT void jl_gc_take_heap_snapshot(ios_t *stream, char all_one)
     gc_heap_snapshot_enabled = false;
     g_snapshot = nullptr;
 
-    jl_spin_mutex_unlock(&heapsnapshot_lock);
+    JL_SPIN_UNLOCK(&heapsnapshot_lock);
 
     // When we return, the snapshot is full
     // Dump the snapshot

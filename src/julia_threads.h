@@ -116,11 +116,19 @@ typedef pthread_t jl_thread_t;
 
 struct _jl_task_t;
 
-// Recursive spin lock
+// Recursive spin lock with GC integration
 typedef struct {
     _Atomic(struct _jl_task_t*) owner;
+    _Atomic(uint32_t) padding;
     uint32_t count;
 } jl_spin_mutex_t;
+
+// Recursive sleep lock with GC integration
+typedef struct {
+    _Atomic(struct _jl_task_t *) owner;
+    _Atomic(uint32_t) waiters;
+    uint32_t count;
+} jl_sleep_mutex_t;
 
 typedef struct {
     jl_taggedvalue_t *freelist;   // root of list of free objects

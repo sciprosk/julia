@@ -97,11 +97,11 @@ JL_DLLEXPORT void jl_set_newly_inferred(jl_value_t* _newly_inferred)
 
 JL_DLLEXPORT void jl_push_newly_inferred(jl_value_t* ci)
 {
-    JL_LOCK(&newly_inferred_mutex);
+    JL_SPIN_LOCK(&newly_inferred_mutex);
     size_t end = jl_array_len(newly_inferred);
     jl_array_grow_end(newly_inferred, 1);
     jl_arrayset(newly_inferred, ci, end);
-    JL_UNLOCK(&newly_inferred_mutex);
+    JL_SPIN_UNLOCK(&newly_inferred_mutex);
 }
 
 

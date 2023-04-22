@@ -721,12 +721,12 @@ static NOINLINE void _finish_julia_init(JL_IMAGE_SEARCH rel, jl_ptls_t ptls, jl_
 JL_DLLEXPORT int jl_default_debug_info_kind;
 
 static void init_global_mutexes(void) {
-    JL_MUTEX_INIT(&jl_modules_mutex, "jl_modules_mutex");
-    JL_MUTEX_INIT(&precomp_statement_out_lock, "precomp_statement_out_lock");
-    JL_MUTEX_INIT(&newly_inferred_mutex, "newly_inferred_mutex");
-    JL_MUTEX_INIT(&global_roots_lock, "global_roots_lock");
-    JL_MUTEX_INIT(&jl_codegen_lock, "jl_codegen_lock");
-    JL_MUTEX_INIT(&typecache_lock, "typecache_lock");
+    JL_SPIN_MUTEX_INIT(&jl_modules_mutex, "jl_modules_mutex");
+    JL_SPIN_MUTEX_INIT(&precomp_statement_out_lock, "precomp_statement_out_lock");
+    JL_SPIN_MUTEX_INIT(&newly_inferred_mutex, "newly_inferred_mutex");
+    JL_SPIN_MUTEX_INIT(&global_roots_lock, "global_roots_lock");
+    JL_SPIN_MUTEX_INIT(&jl_codegen_lock, "jl_codegen_lock");
+    JL_SPIN_MUTEX_INIT(&typecache_lock, "typecache_lock");
 }
 
 JL_DLLEXPORT void julia_init(JL_IMAGE_SEARCH rel)

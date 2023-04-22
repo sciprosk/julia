@@ -162,6 +162,12 @@ static inline void jl_dyn_mutex_unlock_nogc(void *lock)
 #define JL_SPIN_LOCK_NOGC(m) jl_spin_mutex_lock_nogc(m)
 #define JL_SPIN_UNLOCK_NOGC(m) jl_spin_mutex_unlock_nogc(m)
 
+#define JL_SLEEP_MUTEX_INIT(m, name) jl_sleep_mutex_init(m, name)
+#define JL_SLEEP_LOCK(m) jl_sleep_mutex_lock(m)
+#define JL_SLEEP_UNLOCK(m) jl_sleep_mutex_unlock(m)
+#define JL_SLEEP_LOCK_NOGC(m) jl_sleep_mutex_lock_nogc(m)
+#define JL_SLEEP_UNLOCK_NOGC(m) jl_sleep_mutex_unlock_nogc(m)
+
 #ifdef __cplusplus
 }
 #endif

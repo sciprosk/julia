@@ -771,17 +771,14 @@ JL_DLLEXPORT void _jl_spin_mutex_init(jl_spin_mutex_t *lock, const char *name) J
 {
     lock->count = 0;
     // high bit of padding identifies this as a spin lock
-    jl_atomic_store_relaxed(&lock->padding, (uint32_t)(1ull << 31));
+    jl_atomic_store_relaxed(&lock->padding, 0);
     jl_atomic_store_release(&lock->owner, (jl_task_t*)NULL);
     jl_profile_lock_init(lock, name);
 }
 
 JL_DLLEXPORT void _jl_spin_mutex_wait(jl_task_t *self, jl_spin_mutex_t *lock, int safepoint)
 {
-    // call out the likely uninitialized case specifically
-    assert(jl_atomic_load_relaxed(&lock->padding) != 0 && "Spin lock not initialized!");
-    // high bit of padding identifies this as a spin lock
-    assert(jl_atomic_load_relaxed(&lock->padding) == (1ull << 31) && "Unexpected padding bits in spin lock!");
+    assert(jl_atomic_load_relaxed(&lock->padding) == 0 && "Spin lock not initialized!");
     jl_task_t *owner = jl_atomic_load_relaxed(&lock->owner);
     if (owner == self) {
         lock->count++;
@@ -846,10 +843,7 @@ JL_DLLEXPORT void _jl_spin_mutex_lock(jl_task_t *self, jl_spin_mutex_t *lock)
 
 JL_DLLEXPORT int _jl_spin_mutex_trylock_nogc(jl_task_t *self, jl_spin_mutex_t *lock)
 {
-    // call out the likely uninitialized case specifically
-    assert(jl_atomic_load_relaxed(&lock->padding) != 0 && "Spin lock not initialized!");
-    // high bit of padding identifies this as a spin lock
-    assert(jl_atomic_load_relaxed(&lock->padding) == (1ull << 31) && "Unexpected padding bits in spin lock!");
+    assert(jl_atomic_load_relaxed(&lock->padding) == 0 && "Spin lock not initialized!");
     jl_task_t *owner = jl_atomic_load_acquire(&lock->owner);
     if (owner == self) {
         lock->count++;
@@ -874,10 +868,7 @@ JL_DLLEXPORT int _jl_spin_mutex_trylock(jl_task_t *self, jl_spin_mutex_t *lock)
 
 JL_DLLEXPORT void _jl_spin_mutex_unlock_nogc(jl_spin_mutex_t *lock)
 {
-    // call out the likely uninitialized case specifically
-    assert(jl_atomic_load_relaxed(&lock->padding) != 0 && "Spin lock not initialized!");
-    // high bit of padding identifies this as a spin lock
-    assert(jl_atomic_load_relaxed(&lock->padding) == (1ull << 31) && "Unexpected padding bits in spin lock!");
+    assert(jl_atomic_load_relaxed(&lock->padding) == 0 && "Spin lock not initialized!");
 #ifndef __clang_gcanalyzer__
     assert(jl_atomic_load_relaxed(&lock->owner) == jl_current_task &&
            "Unlocking a lock in a different thread.");
@@ -906,24 +897,26 @@ JL_DLLEXPORT void _jl_spin_mutex_unlock(jl_task_t *self, jl_spin_mutex_t *lock)
     }
 }
 
+#define SLEEP_LOCK_BIT ((uint32_t)(1ull << 31))
+
 JL_DLLEXPORT void _jl_sleep_mutex_init(jl_sleep_mutex_t *lock, const char *name) JL_NOTSAFEPOINT
 {
     // waiters is overloaded:
-    // bit 31 indicates spin lock
+    // bit 31 indicates sleep lock
     // bits 30:1 indicate number of waiter threads
     // bit 0 indicates lock held
     lock->count = 0;
     jl_atomic_store_relaxed(&lock->owner, (jl_task_t*)NULL);
-    jl_atomic_store_release(&lock->waiters, 0);
+    jl_atomic_store_release(&lock->waiters, SLEEP_LOCK_BIT);
     jl_profile_lock_init(lock, name);
 }
 
 JL_DLLEXPORT void _jl_sleep_mutex_wait(jl_task_t *self, jl_sleep_mutex_t *lock, int safepoint)
 {
     // high bit of padding identifies this as a spin lock
-    assert((jl_atomic_load_relaxed(&lock->waiters) & (1ull << 31)) == 0 && "Unexpected spin lock in sleeping wait!");
-    uint32_t old_waiters = 0;
-    if (jl_atomic_cmpswap_acqrel(&lock->waiters, &old_waiters, 1)) {
+    assert((jl_atomic_load_relaxed(&lock->waiters) & SLEEP_LOCK_BIT) && "Unexpected spin lock in sleeping wait!");
+    uint32_t old_waiters = SLEEP_LOCK_BIT;
+    if (jl_atomic_cmpswap_acqrel(&lock->waiters, &old_waiters, SLEEP_LOCK_BIT | 1)) {
         // no one is waiting, we just took the lock
         jl_atomic_store_relaxed(&lock->owner, self);
         lock->count = 1;
@@ -945,7 +938,7 @@ JL_DLLEXPORT void _jl_sleep_mutex_wait(jl_task_t *self, jl_sleep_mutex_t *lock, 
     hash &= (1 << SLEEP_HASH_BITS) - 1;
     uv_mutex_lock(sleep_locks + hash);
     while (1) {
-        assert(jl_atomic_load_relaxed(&lock->waiters) >> 1 && "Waiting thread was bypassed!");
+        assert((jl_atomic_load_relaxed(&lock->waiters) & ~(SLEEP_LOCK_BIT | 1)) && "Waiting thread was bypassed!");
         uint32_t waiters = jl_atomic_load_acquire(&lock->waiters);
         if ((waiters & 1) == 0) {
             // nobody else holds the lock, we can take it
@@ -974,9 +967,9 @@ JL_DLLEXPORT void _jl_sleep_mutex_lock(jl_task_t *self, jl_sleep_mutex_t *lock)
 JL_DLLEXPORT int _jl_sleep_mutex_trylock_nogc(jl_task_t *self, jl_sleep_mutex_t *lock)
 {
     // high bit of padding identifies this as a spin lock
-    assert((jl_atomic_load_relaxed(&lock->waiters) & (1ull << 31)) == 0 && "Unexpected spin lock in sleeping trylock!");
-    uint32_t none = 0;
-    if (jl_atomic_cmpswap_acqrel(&lock->waiters, &none, 1)) {
+    assert((jl_atomic_load_relaxed(&lock->waiters) & SLEEP_LOCK_BIT) && "Unexpected spin lock in sleeping trylock!");
+    uint32_t none = SLEEP_LOCK_BIT;
+    if (jl_atomic_cmpswap_acqrel(&lock->waiters, &none, SLEEP_LOCK_BIT | 1)) {
         // no one is waiting, we just took the lock
         jl_atomic_store_relaxed(&lock->owner, self);
         lock->count = 1;
@@ -1003,13 +996,13 @@ JL_DLLEXPORT int _jl_sleep_mutex_trylock(jl_task_t *self, jl_sleep_mutex_t *lock
 JL_DLLEXPORT void _jl_sleep_mutex_unlock_nogc(jl_sleep_mutex_t *lock)
 {
     // high bit of padding identifies this as a spin lock
-    assert((jl_atomic_load_relaxed(&lock->waiters) & (1ull << 31)) == 0 && "Unexpected spin lock in sleeping unlock!");
+    assert((jl_atomic_load_relaxed(&lock->waiters) & SLEEP_LOCK_BIT) && "Unexpected spin lock in sleeping unlock!");
     if (--lock->count == 0) {
         //Do the release
         jl_profile_lock_release_start(lock);
         jl_atomic_store_relaxed(&lock->owner, (jl_task_t*)NULL);
-        uint32_t just_me = 1;
-        if (!jl_atomic_cmpswap_acqrel(&lock->waiters, &just_me, 0)) {
+        uint32_t just_me = SLEEP_LOCK_BIT | 1;
+        if (!jl_atomic_cmpswap_acqrel(&lock->waiters, &just_me, SLEEP_LOCK_BIT)) {
             jl_ptls_t ptls = jl_current_task->ptls;
             int8_t gc_state = jl_gc_safe_enter(ptls);
             // somebody else is waiting, wake them up
@@ -1049,21 +1042,21 @@ JL_DLLEXPORT void _jl_sleep_mutex_unlock(jl_task_t *self, jl_sleep_mutex_t *lock
 
 void _jl_dyn_mutex_unlock(jl_task_t *self, void *lock)
 {
-    int is_spin_mutex = jl_atomic_load_relaxed(&((jl_spin_mutex_t*)lock)->padding) & (1ull << 31);
-    if (is_spin_mutex) {
-        _jl_spin_mutex_unlock(self, (jl_spin_mutex_t*)lock);
-    } else {
+    int is_sleep_mutex = jl_atomic_load_relaxed(&((jl_spin_mutex_t*)lock)->padding) & SLEEP_LOCK_BIT;
+    if (is_sleep_mutex) {
         _jl_sleep_mutex_unlock(self, (jl_sleep_mutex_t*)lock);
+    } else {
+        _jl_spin_mutex_unlock(self, (jl_spin_mutex_t*)lock);
     }
 }
 
 void _jl_dyn_mutex_unlock_nogc(void *lock)
 {
-    int is_spin_mutex = jl_atomic_load_relaxed(&((jl_spin_mutex_t*)lock)->padding) & (1ull << 31);
-    if (is_spin_mutex) {
-        _jl_spin_mutex_unlock_nogc((jl_spin_mutex_t*)lock);
-    } else {
+    int is_sleep_mutex = jl_atomic_load_relaxed(&((jl_spin_mutex_t*)lock)->padding) & SLEEP_LOCK_BIT;
+    if (is_sleep_mutex) {
         _jl_sleep_mutex_unlock_nogc((jl_sleep_mutex_t*)lock);
+    } else {
+        _jl_spin_mutex_unlock_nogc((jl_spin_mutex_t*)lock);
     }
 }
 

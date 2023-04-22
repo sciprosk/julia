@@ -912,8 +912,7 @@ JL_DLLEXPORT void _jl_sleep_mutex_init(jl_sleep_mutex_t *lock, const char *name)
     // bit 31 indicates spin lock
     // bits 30:1 indicate number of waiter threads
     // bit 0 indicates lock held
-    lock->count = (uint32_t)(1ull << 31);
-    jl_atomic_store_relaxed(&lock->count, 0);
+    lock->count = 0;
     jl_atomic_store_relaxed(&lock->owner, (jl_task_t*)NULL);
     jl_atomic_store_release(&lock->waiters, 0);
     jl_profile_lock_init(lock, name);
@@ -981,6 +980,11 @@ JL_DLLEXPORT int _jl_sleep_mutex_trylock_nogc(jl_task_t *self, jl_sleep_mutex_t 
         // no one is waiting, we just took the lock
         jl_atomic_store_relaxed(&lock->owner, self);
         lock->count = 1;
+        return 1;
+    }
+    if (jl_atomic_load_relaxed(&lock->owner) == self) {
+        // we already own the lock, just increment the count
+        lock->count++;
         return 1;
     }
     return 0;

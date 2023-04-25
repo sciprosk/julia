@@ -119,8 +119,9 @@ struct _jl_task_t;
 // Recursive spin lock with GC integration
 typedef struct {
     _Atomic(struct _jl_task_t*) owner;
-    _Atomic(uint32_t) padding;
-    uint32_t count;
+    // Count is only ever accessed on the same thread,
+    // the _Atomic is for parity with sleep_mutex
+    _Atomic(uint32_t) count;
 } jl_spin_mutex_t;
 
 // Recursive sleep lock with GC integration

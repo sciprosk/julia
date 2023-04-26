@@ -768,7 +768,7 @@ JL_DLLEXPORT void jl_exit_threaded_region(void)
     }
 }
 
-static int is_spin_mutex(void *lock)
+static int is_spin_mutex(void *lock) JL_NOTSAFEPOINT
 {
     return (jl_atomic_load_relaxed(&((jl_spin_mutex_t *)lock)->count) & SLEEP_LOCK_BIT) == 0;
 }

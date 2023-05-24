@@ -603,7 +603,7 @@ function __init__()
     end
     # Prevent spawned Julia process from getting stuck waiting on Tracy to connect.
     delete!(ENV, "JULIA_WAIT_FOR_TRACY")
-    if get_bool_env("JULIA_USE_NEW_PARSER", false) === true
+    if get_bool_env("JULIA_USE_NEW_PARSER", true) === true
         JuliaSyntax.enable_in_core!()
     end
     nothing

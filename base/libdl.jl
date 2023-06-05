@@ -9,7 +9,7 @@ import Base.DL_LOAD_PATH
 
 export DL_LOAD_PATH, RTLD_DEEPBIND, RTLD_FIRST, RTLD_GLOBAL, RTLD_LAZY, RTLD_LOCAL,
     RTLD_NODELETE, RTLD_NOLOAD, RTLD_NOW, dlclose, dlopen, dlopen_e, dlsym, dlsym_e,
-    dlpath, find_library, dlext, dllist
+    dlpath, find_library, dlext, dllist, LazyLibrary, LazyStringFunc
 
 """
     DL_LOAD_PATH
@@ -45,6 +45,9 @@ applicable.
 """
 (RTLD_DEEPBIND, RTLD_FIRST, RTLD_GLOBAL, RTLD_LAZY, RTLD_LOCAL, RTLD_NODELETE, RTLD_NOLOAD, RTLD_NOW)
 
+# The default flags for `dlopen()`
+const default_rtld_flags = RTLD_LAZY | RTLD_DEEPBIND
+
 """
     dlsym(handle, sym; throw_error::Bool = true)
 
@@ -72,8 +75,8 @@ end
 Look up a symbol from a shared library handle, silently return `C_NULL` on lookup failure.
 This method is now deprecated in favor of `dlsym(handle, sym; throw_error=false)`.
 """
-function dlsym_e(hnd::Ptr, s::Union{Symbol,AbstractString})
-    return something(dlsym(hnd, s; throw_error=false), C_NULL)
+function dlsym_e(args...)
+    return something(dlsym(args...; throw_error=false), C_NULL)
 end
 
 """
@@ -110,10 +113,10 @@ If the library cannot be found, this method throws an error, unless the keyword 
 """
 function dlopen end
 
-dlopen(s::Symbol, flags::Integer = RTLD_LAZY | RTLD_DEEPBIND; kwargs...) =
+dlopen(s::Symbol, flags::Integer = default_rtld_flags; kwargs...) =
     dlopen(string(s), flags; kwargs...)
 
-function dlopen(s::AbstractString, flags::Integer = RTLD_LAZY | RTLD_DEEPBIND; throw_error::Bool = true)
+function dlopen(s::AbstractString, flags::Integer = default_rtld_flags; throw_error::Bool = true)
     ret = ccall(:jl_load_dynamic_library, Ptr{Cvoid}, (Cstring,UInt32,Cint), s, flags, Cint(throw_error))
     if ret == C_NULL
         return nothing
@@ -314,4 +317,98 @@ function dllist()
     return dynamic_libraries
 end
 
+
+const LazyLibraryLock = Base.ReentrantLock()
+"""
+    LazyLibrary(name, flags = <default dlopen flags>,
+                dependencies = LazyLibrary[], on_load_callback = nothing)
+
+Represents a lazily-loaded library that opens itself and its dependencies on first usage
+in a `dlopen()`, `dlsym()`, or `ccall()` usage.  While this structure contains the
+ability to run arbitrary code on first load via `on_load_callback`, we caution that this
+should be used sparingly, as it is not expected that `ccall()` should result in large
+amounts of Julia code being run.  You may call `ccall()` from within the
+`on_load_callback` but only for the current library and its dependencies.
+"""
+mutable struct LazyLibrary
+    # Name and flags to open with
+    const name::AbstractString
+    const flags::UInt32
+
+    # Dependencies that must be loaded before we can load
+    dependencies::Vector{LazyLibrary}
+
+    # Function that gets called once upon initial load with the pointer as an argument
+    on_load_callback::Union{Nothing,Function}
+
+    # Pointer that we eventually fill out upon first `dlopen()`
+    @atomic handle::Ptr{Cvoid}
+    function LazyLibrary(name; flags = default_rtld_flags, dependencies = LazyLibrary[],
+                         on_load_callback = nothing)
+        return new(
+            name,
+            UInt32(flags),
+            collect(dependencies),
+            on_load_callback,
+            C_NULL,
+        )
+    end
+end
+
+# Register this LazyLibrary type with the C code during bootstrap,
+# so that `ccall()` lowering knows what a `LazyLibrary` is, and how
+# to `dlopen()` it.  This hack brought to you by Valentin. \[0_o]/
+Base.unsafe_store!(cglobal(:jl_lazy_library_type, Any), LazyLibrary)
+Base.unsafe_store!(cglobal(:jl_libdl_dlopen_func, Any), dlopen)
+
+"""
+    LazyStringFunc
+
+Helper type for `LazyString` to be used with `LazyLibrary` so that runtime-generated
+library paths can be used with lazy libraries.  Note that the value will only be computed
+once; it is cached after initial computation.  Typical usage:
+
+```
+libfoo = LazyLibrary(LazyStringFunc(() -> joinpath(artifact"foo/lib/libfoo.so.1.2.3")))
+```
+"""
+LazyStringFunc(f) = LazyString(_LazyStringFunc(f))
+
+struct _LazyStringFunc <: AbstractString
+    f::Function
+end
+Base.print(io::IO, lsf::_LazyStringFunc) = print(io, lsf.f())
+
+function dlopen(ll::LazyLibrary, flags::Integer = ll.flags; kwargs...)
+    handle = @atomic :acquire ll.handle
+    if handle != C_NULL
+        return handle
+    end
+
+    # Ensure that all dependencies are loaded
+    for dep in ll.dependencies
+        dlopen(dep; kwargs...)
+    end
+
+    # Only let a single thread run callbacks at a time
+    @lock LazyLibraryLock begin
+        # Check to see if another thread has already run this
+        handle = @atomic :acquire ll.handle
+        if handle == C_NULL
+            # Load our library
+            handle = dlopen(ll.name, flags; kwargs...)
+
+            # Invoke our on load callback, if it exists
+            if ll.on_load_callback !== nothing
+                ll.on_load_callback(handle)
+            end
+
+            @atomic :release ll.handle = handle
+        end
+    end
+
+    return handle
+end
+dlsym(ll::LazyLibrary, args...; kwargs...) = dlsym(dlopen(ll), args...; kwargs...)
+dlpath(ll::LazyLibrary) = dlpath(dlopen(ll))
 end # module Libdl

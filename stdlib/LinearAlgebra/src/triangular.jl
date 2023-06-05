@@ -1530,11 +1530,7 @@ _inner_type_promotion(op, ::Type{TA}, ::Type{TB}) where {TA,TB} =
 ## The general promotion methods
 function *(A::AbstractTriangular, B::AbstractTriangular)
     TAB = _init_eltype(*, eltype(A), eltype(B))
-    if TAB <: BlasFloat
-        lmul!(convert(AbstractArray{TAB}, A), copy_similar(B, TAB))
-    else
-        mul!(similar(B, TAB, size(B)), A, B)
-    end
+    mul!(similar(B, TAB, size(B)), A, B)
 end
 
 for mat in (:AbstractVector, :AbstractMatrix)
@@ -1542,11 +1538,7 @@ for mat in (:AbstractVector, :AbstractMatrix)
     @eval function *(A::AbstractTriangular, B::$mat)
         require_one_based_indexing(B)
         TAB = _init_eltype(*, eltype(A), eltype(B))
-        if TAB <: BlasFloat
-            lmul!(convert(AbstractArray{TAB}, A), copy_similar(B, TAB))
-        else
-            mul!(similar(B, TAB, size(B)), A, B)
-        end
+        mul!(similar(B, TAB, size(B)), A, B)
     end
     ### Left division with triangle to the left hence rhs cannot be transposed. No quotients.
     @eval function \(A::Union{UnitUpperTriangular,UnitLowerTriangular}, B::$mat)
@@ -1594,11 +1586,7 @@ end
 function *(A::AbstractMatrix, B::AbstractTriangular)
     require_one_based_indexing(A)
     TAB = _init_eltype(*, eltype(A), eltype(B))
-    if TAB <: BlasFloat
-        rmul!(copy_similar(A, TAB), convert(AbstractArray{TAB}, B))
-    else
-        mul!(similar(A, TAB, size(A)), A, B)
-    end
+    mul!(similar(A, TAB, size(A)), A, B)
 end
 # ambiguity resolution with definitions in matmul.jl
 *(v::AdjointAbsVec, A::AbstractTriangular) = adjoint(adjoint(A) * v.parent)

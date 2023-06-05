@@ -937,9 +937,9 @@ function _generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun, A::Abstr
             if tfun === identity
                 @inbounds for j in 1:n
                     for i in 1:m
-                        Cij = tfun(A[i,i]) * B[i,j]
+                        Cij = A[i,i] * B[i,j]
                         for k in i + 1:m
-                            Cij += tfun(A[i,k]) * B[k,j]
+                            Cij += A[i,k] * B[k,j]
                         end
                         C[i,j] = Cij
                     end
@@ -947,7 +947,7 @@ function _generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun, A::Abstr
             else # tfun in (transpose, adjoint)
                 @inbounds for j in 1:n
                     for i in m:-1:1
-                        Cij = (tfun === adjoint ? real : identity)(A[i,i]) * B[i,j]
+                        Cij = tfun(A[i,i]) * B[i,j]
                         for k in 1:i - 1
                             Cij += tfun(A[k,i]) * B[k,j]
                         end
@@ -961,7 +961,7 @@ function _generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun, A::Abstr
                     for i in 1:m
                         Cij = oneunit(eltype(A)) * B[i,j]
                         for k in i + 1:m
-                            Cij += tfun(A[i,k]) * B[k,j]
+                            Cij += A[i,k] * B[k,j]
                         end
                         C[i,j] = Cij
                     end
@@ -983,9 +983,9 @@ function _generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun, A::Abstr
             if tfun === identity
                 @inbounds for j in 1:n
                     for i in m:-1:1
-                        Cij = tfun(A[i,i]) * B[i,j]
+                        Cij = A[i,i] * B[i,j]
                         for k in 1:i - 1
-                            Cij += tfun(A[i,k]) * B[k,j]
+                            Cij += A[i,k] * B[k,j]
                         end
                         C[i,j] = Cij
                     end
@@ -993,7 +993,7 @@ function _generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun, A::Abstr
             else # tfun in (transpose, adjoint)
                 @inbounds for j in 1:n
                     for i in 1:m
-                        Cij = (tfun === adjoint ? real : identity)(A[i,i]) * B[i,j]
+                        Cij = tfun(A[i,i]) * B[i,j]
                         for k in i + 1:m
                             Cij += tfun(A[k,i]) * B[k,j]
                         end
@@ -1007,7 +1007,7 @@ function _generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun, A::Abstr
                     for i in m:-1:1
                         Cij = oneunit(eltype(A)) * B[i,j]
                         for k in 1:i - 1
-                            Cij += tfun(A[i,k]) * B[k,j]
+                            Cij += A[i,k] * B[k,j]
                         end
                         C[i,j] = Cij
                     end

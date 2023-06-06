@@ -132,11 +132,11 @@ for T = (:Number, :UniformScaling, :Diagonal)
 end
 
 function *(H::UpperHessenberg, U::UpperOrUnitUpperTriangular)
-    HH = generic_mattrimul!(_initarray(*, eltype(H), eltype(U), H), H, U)
+    HH = mul!(_initarray(*, eltype(H), eltype(U), H), H, U)
     UpperHessenberg(HH)
 end
 function *(U::UpperOrUnitUpperTriangular, H::UpperHessenberg)
-    HH = generic_trimatmul!(_initarray(*, eltype(U), eltype(H), H), U, H)
+    HH = mul!(_initarray(*, eltype(U), eltype(H), H), U, H)
     UpperHessenberg(HH)
 end
 

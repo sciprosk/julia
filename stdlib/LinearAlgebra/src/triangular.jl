@@ -687,15 +687,17 @@ isunit_char(::LowerTriangular) = 'N'
 isunit_char(::UnitLowerTriangular) = 'U'
 
 lmul!(A::Tridiagonal, B::AbstractTriangular) = A*full!(B)
-mul!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVector) = generic_trimatmul!(C, A, B)
-mul!(C::AbstractMatrix, A::AbstractTriangular, B::AbstractMatrix) = generic_trimatmul!(C, A, B)
-mul!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractTriangular) = generic_mattrimul!(C, A, B)
-mul!(C::AbstractMatrix, A::AbstractTriangular, B::AbstractTriangular) = generic_trimatmul!(C, A, B)
+mul!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVector) = _trimul!(C, A, B)
+mul!(C::AbstractMatrix, A::AbstractTriangular, B::AbstractMatrix) = _trimul!(C, A, B)
+mul!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractTriangular) = _trimul!(C, A, B)
+mul!(C::AbstractMatrix, A::AbstractTriangular, B::AbstractTriangular) = _trimul!(C, A, B)
 
-generic_trimatmul!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVecOrMat) =
-    _generic_trimatmul!(C, uplo_char(A), isunit_char(A), adj_or_trans(parent(A)), _parent(parent(A)), B)
-generic_mattrimul!(C::AbstractMatrix, A::AbstractMatrix, B::UpperOrLowerTriangular) =
-    _generic_mattrimul!(C, uplo_char(B), isunit_char(B), adj_or_trans(parent(B)), A, _parent(parent(B)))
+_trimul!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVecOrMat) =
+    generic_trimatmul!(C, uplo_char(A), isunit_char(A), adj_or_trans(parent(A)), _parent(parent(A)), B)
+_trimul!(C::AbstractMatrix, A::AbstractMatrix, B::UpperOrLowerTriangular) =
+    generic_mattrimul!(C, uplo_char(B), isunit_char(B), adj_or_trans(parent(B)), A, _parent(parent(B)))
+_trimul!(C::AbstractMatrix, A::UpperOrLowerTriangular, B::UpperOrLowerTriangular) =
+    generic_trimatmul!(C, uplo_char(A), isunit_char(A), adj_or_trans(parent(A)), _parent(parent(A)), B)
 
 for TC in (:AbstractVector, :AbstractMatrix)
     @eval @inline function mul!(C::$TC, A::AbstractTriangular, B::AbstractVector, alpha::Number, beta::Number)
@@ -721,9 +723,9 @@ end
 
 
 # generic fallback for AbstractTriangular matrices outside of the four subtypes provided here
-generic_trimatmul!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) =
+_trimul!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) =
     lmul!(A, inplace_adj_or_trans(B)(C, _parent(B)))
-generic_mattrimul!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractTriangular) =
+_trimul!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractTriangular) =
     rmul!(inplace_adj_or_trans(A)(C, _parent(A)), B)
 
 # preserve triangular structure in in-place multiplication
@@ -735,8 +737,8 @@ for (cty, aty, bty) in ((:UpperTriangular, :UpperTriangular, :UpperTriangular),
                         (:LowerTriangular, :LowerTriangular, :UnitLowerTriangular),
                         (:LowerTriangular, :UnitLowerTriangular, :LowerTriangular),
                         (:UnitLowerTriangular, :UnitLowerTriangular, :UnitLowerTriangular))
-    @eval function generic_trimatmul!(C::$cty, A::$aty, B::$bty)
-        generic_trimatmul!(parent(C), A, B)
+    @eval function _trimul!(C::$cty, A::$aty, B::$bty)
+        _trimul!(parent(C), A, B)
         return C
     end
 end
@@ -802,12 +804,12 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'U', 'N'),
 end
 
 # Vector multiplication
-_generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, b::AbstractVector{T}) where {T<:BlasFloat} =
+generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, b::AbstractVector{T}) where {T<:BlasFloat} =
     BLAS.trmv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, c === b ? c : copyto!(c, b))
 # Matrix multiplication
-_generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix{T}) where {T<:BlasFloat} =
+generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix{T}) where {T<:BlasFloat} =
     BLAS.trmm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : copyto!(C, B))
-_generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix{T}, B::StridedMatrix{T}) where {T<:BlasFloat} =
+generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix{T}, B::StridedMatrix{T}) where {T<:BlasFloat} =
     BLAS.trmm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copyto!(C, A))
 
 # redirect back to BLAS
@@ -870,8 +872,8 @@ end
 # Generic routines #
 ####################
 
-lmul!(A::UpperOrLowerTriangular, B::AbstractVecOrMat) = @inline generic_trimatmul!(B, A, B)
-rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular)   = @inline generic_mattrimul!(A, A, B)
+lmul!(A::UpperOrLowerTriangular, B::AbstractVecOrMat) = @inline _trimul!(B, A, B)
+rmul!(A::AbstractMatrix, B::UpperOrLowerTriangular)   = @inline _trimul!(A, A, B)
 
 for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
                    (LowerTriangular, UnitLowerTriangular))
@@ -921,7 +923,7 @@ for (t, unitt) in ((UpperTriangular, UnitUpperTriangular),
 end
 
 ## Generic triangular multiplication
-function _generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun, A::AbstractMatrix, B::AbstractVecOrMat)
+function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun, A::AbstractMatrix, B::AbstractVecOrMat)
     require_one_based_indexing(C, A, B)
     m, n = size(B, 1), size(B, 2)
     N = size(A, 1)
@@ -1028,7 +1030,7 @@ function _generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun, A::Abstr
     return C
 end
 # Conjugate cases transpose(adjoint(A)) and adjoint(transpose(A))
-function _generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, _, xA::AdjOrTrans, B::AbstractVecOrMat)
+function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, _, xA::AdjOrTrans, B::AbstractVecOrMat)
     A = parent(xA)
     require_one_based_indexing(C, A, B)
     m, n = size(B, 1), size(B, 2)
@@ -1088,7 +1090,7 @@ function _generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, _, xA::AdjOrTr
     return C
 end
 
-function _generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun, A::AbstractMatrix, B::AbstractMatrix)
+function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun, A::AbstractMatrix, B::AbstractMatrix)
     require_one_based_indexing(C, A, B)
     m, n = size(A, 1), size(A, 2)
     N = size(B, 1)
@@ -1195,7 +1197,7 @@ function _generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun, A::Abstrac
     return C
 end
 # Conjugate cases
-function _generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, _, A::AbstractMatrix, xB::AdjOrTrans)
+function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, _, A::AbstractMatrix, xB::AdjOrTrans)
     B = parent(xB)
     require_one_based_indexing(C, A, B)
     m, n = size(A, 1), size(A, 2)

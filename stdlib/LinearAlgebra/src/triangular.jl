@@ -693,14 +693,18 @@ mul!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractTriangular) = _trimul!(C, 
 mul!(C::AbstractMatrix, A::AbstractTriangular, B::AbstractTriangular) = _trimul!(C, A, B)
 
 # generic fallback for AbstractTriangular matrices outside of the four subtypes provided here
-_trimul!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVecOrMat) =
+_trimul!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractVector) =
+    lmul!(A, inplace_adj_or_trans(B)(C, _parent(B)))
+_trimul!(C::AbstractMatrix, A::AbstractTriangular, B::AbstractMatrix) =
     lmul!(A, inplace_adj_or_trans(B)(C, _parent(B)))
 _trimul!(C::AbstractMatrix, A::AbstractMatrix, B::AbstractTriangular) =
     rmul!(inplace_adj_or_trans(A)(C, _parent(A)), B)
-_trimul!(C::AbstractVecOrMat, A::AbstractTriangular, B::AbstractTriangular) =
+_trimul!(C::AbstractMatrix, A::AbstractTriangular, B::AbstractTriangular) =
     lmul!(A, copyto!(C, B))
 # redirect for UpperOrLowerTriangular
-_trimul!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVecOrMat) =
+_trimul!(C::AbstractVecOrMat, A::UpperOrLowerTriangular, B::AbstractVector) =
+    generic_trimatmul!(C, uplo_char(A), isunit_char(A), adj_or_trans(parent(A)), _parent(parent(A)), B)
+_trimul!(C::AbstractMatrix, A::UpperOrLowerTriangular, B::AbstractMatrix) =
     generic_trimatmul!(C, uplo_char(A), isunit_char(A), adj_or_trans(parent(A)), _parent(parent(A)), B)
 _trimul!(C::AbstractMatrix, A::AbstractMatrix, B::UpperOrLowerTriangular) =
     generic_mattrimul!(C, uplo_char(B), isunit_char(B), adj_or_trans(parent(B)), A, _parent(parent(B)))

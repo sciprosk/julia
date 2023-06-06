@@ -1114,7 +1114,7 @@ function _generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun, A::Abstrac
             else # tfun in (transpose, adjoint)
                 @inbounds for i in 1:m
                     for j in 1:n
-                        Cij = A[i,j] * (tfun === adjoint ? real : identity)(B[j,j])
+                        Cij = A[i,j] * tfun(B[j,j])
                         for k in j + 1:n
                             Cij += A[i,k] * tfun(B[j,k])
                         end
@@ -1160,7 +1160,7 @@ function _generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun, A::Abstrac
             else # tfun in (transpose, adjoint)
                 @inbounds for i in 1:m
                     for j in n:-1:1
-                        Cij = A[i,j] * (tfun === adjoint ? real : identity)(B[j,j])
+                        Cij = A[i,j] * tfun(B[j,j])
                         for k in 1:j - 1
                             Cij += A[i,k] * tfun(B[j,k])
                         end

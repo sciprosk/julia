@@ -1255,7 +1255,7 @@ mktempdir() do path
             s = "cd(\"$escpath"
             c, r = test_complete(s)
             @test s[r] == "needs_escape3\\\\"
-            @test "needs_escape3\\\\.file" in c
+            @test "needs_escape3\\\\.file\"" in c
         end
 
         # Test for issue #10324

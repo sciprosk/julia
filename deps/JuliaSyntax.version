@@ -1,4 +1,4 @@
 JULIASYNTAX_BRANCH = main
-JULIASYNTAX_SHA1 = f6431b842645b3c42b18168326d7215f3846310b
+JULIASYNTAX_SHA1 = 7e26d8b3f0f011d45744a09622aed1984a373655
 JULIASYNTAX_GIT_URL := https://github.com/JuliaLang/JuliaSyntax.jl.git
 JULIASYNTAX_TAR_URL = https://api.github.com/repos/JuliaLang/JuliaSyntax.jl/tarball/$1

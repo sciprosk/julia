@@ -336,7 +336,7 @@ IndexStyle(::Type{<:AdjOrTransAbsMat}) = IndexCartesian()
 @propagate_inbounds getindex(A::AdjOrTrans{T,<:AdjOrTransAbsMat}, i::Int, j::Int) where {T} = conj(parent(parent(A))[i, j])::T
 @propagate_inbounds setindex!(v::AdjOrTransAbsVec, x, i::Int) = (setindex!(v.parent, wrapperop(v)(x), i-1+first(axes(v.parent)[1])); v)
 @propagate_inbounds setindex!(A::AdjOrTransAbsMat, x, i::Int, j::Int) = (setindex!(A.parent, wrapperop(A)(x), j, i); A)
-@propagate_inbounds setindex!(A::AdjOrTrans{T,<:AdjOrTransAbsMat}, x, i::Int, j::Int) = (setindex!(parent(parent(A)), conj(x), i, j); A)
+@propagate_inbounds setindex!(A::AdjOrTrans{<:Any,<:AdjOrTransAbsMat}, x, i::Int, j::Int) = (setindex!(parent(parent(A)), conj(x), i, j); A)
 # AbstractArray interface, additional definitions to retain wrapper over vectors where appropriate
 @propagate_inbounds getindex(v::AdjOrTransAbsVec, ::Colon, is::AbstractArray{Int}) = wrapperop(v)(v.parent[is])
 @propagate_inbounds getindex(v::AdjOrTransAbsVec, ::Colon, ::Colon) = wrapperop(v)(v.parent[:])

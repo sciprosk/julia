@@ -169,7 +169,7 @@ typedef Instruction TerminatorInst;
 
 void setName(jl_codegen_params_t &params, Value *V, const Twine &Name)
 {
-    if (params.names) {
+    if (params.debug_enabled) {
         V->setName(Name);
     }
 }
@@ -1610,7 +1610,6 @@ public:
     Value *pgcstack = NULL;
     Instruction *topalloca = NULL;
 
-    bool debug_enabled = false;
     bool use_cache = false;
     bool external_linkage = false;
     const jl_cgparams_t *params = NULL;
@@ -7135,11 +7134,9 @@ static jl_llvm_functions_t
     // jl_printf(JL_STDERR, "\n*** compiling %s at %s:%d\n\n",
     //           jl_symbol_name(ctx.name), ctx.file.str().c_str(), toplineno);
 
-    ctx.debug_enabled = true;
+    bool debug_enabled = ctx.emission_context.debug_enabled;
     if (dbgFuncName.empty()) // Should never happen anymore?
-        ctx.debug_enabled = 0;
-    if (jl_options.debug_level == 0)
-        ctx.debug_enabled = 0;
+        debug_enabled = 0;
 
     // step 2. process var-info lists to see what vars need boxing
     int n_ssavalues = jl_is_long(src->ssavaluetypes) ? jl_unbox_long(src->ssavaluetypes) : jl_array_len(src->ssavaluetypes);
@@ -7307,11 +7304,11 @@ static jl_llvm_functions_t
         tableKind = DICompileUnit::DebugNameTableKind::GNU;
     else
         tableKind = DICompileUnit::DebugNameTableKind::None;
-    DIBuilder dbuilder(*M, true, ctx.debug_enabled ? getOrCreateJuliaCU(*M, emissionKind, tableKind) : NULL);
+    DIBuilder dbuilder(*M, true, debug_enabled ? getOrCreateJuliaCU(*M, emissionKind, tableKind) : NULL);
     DIFile *topfile = NULL;
     DISubprogram *SP = NULL;
     DebugLoc noDbg, topdebugloc;
-    if (ctx.debug_enabled) {
+    if (debug_enabled) {
         topfile = dbuilder.createFile(ctx.file, ".");
         DISubroutineType *subrty;
         if (jl_options.debug_level <= 1)
@@ -7466,7 +7463,7 @@ static jl_llvm_functions_t
             }
             varinfo.value = mark_julia_slot(lv, jt, NULL, ctx.tbaa().tbaa_stack);
             alloc_def_flag(ctx, varinfo);
-            if (ctx.debug_enabled && varinfo.dinfo) {
+            if (debug_enabled && varinfo.dinfo) {
                 assert((Metadata*)varinfo.dinfo->getType() != debuginfo.jl_pvalue_dillvmt);
                 dbuilder.insertDeclare(lv, varinfo.dinfo, dbuilder.createExpression(),
                                        topdebugloc,
@@ -7483,7 +7480,7 @@ static jl_llvm_functions_t
             StoreInst *SI = new StoreInst(Constant::getNullValue(ctx.types().T_prjlvalue), av, false, Align(sizeof(void*)));
             SI->insertAfter(ctx.topalloca);
             varinfo.boxroot = av;
-            if (ctx.debug_enabled && varinfo.dinfo) {
+            if (debug_enabled && varinfo.dinfo) {
                 DIExpression *expr;
                 if ((Metadata*)varinfo.dinfo->getType() == debuginfo.jl_pvalue_dillvmt) {
                     expr = dbuilder.createExpression();
@@ -7678,7 +7675,7 @@ static jl_llvm_functions_t
                             ctx.builder.CreateAlignedLoad(ctx.types().T_prjlvalue, argPtr, Align(sizeof(void*))),
                             false, vi.value.typ));
                     theArg = mark_julia_type(ctx, load, true, vi.value.typ);
-                    if (ctx.debug_enabled && vi.dinfo && !vi.boxroot && !vi.value.V) {
+                    if (debug_enabled && vi.dinfo && !vi.boxroot && !vi.value.V) {
                         SmallVector<uint64_t, 8> addr;
                         addr.push_back(llvm::dwarf::DW_OP_deref);
                         addr.push_back(llvm::dwarf::DW_OP_plus_uconst);
@@ -7697,7 +7694,7 @@ static jl_llvm_functions_t
                 assert(vi.value.V == NULL && "unexpected variable slot created for argument");
                 // keep track of original (possibly boxed) value to avoid re-boxing or moving
                 vi.value = theArg;
-                if (specsig && theArg.V && ctx.debug_enabled && vi.dinfo) {
+                if (specsig && theArg.V && debug_enabled && vi.dinfo) {
                     SmallVector<uint64_t, 8> addr;
                     Value *parg;
                     if (theArg.ispointer()) {
@@ -7823,7 +7820,7 @@ static jl_llvm_functions_t
             else
                 info.is_user_code = in_user_mod(module);
             info.is_tracked = in_tracked_path(info.file);
-            if (ctx.debug_enabled) {
+            if (debug_enabled) {
                 StringRef fname;
                 if (jl_is_method_instance(method))
                     method = ((jl_method_instance_t*)method)->def.value;
@@ -8064,7 +8061,7 @@ static jl_llvm_functions_t
     while (cursor != -1) {
         int32_t debuginfoloc = ((int32_t*)jl_array_data(src->codelocs))[cursor];
         if (debuginfoloc > 0) {
-            if (ctx.debug_enabled)
+            if (debug_enabled)
                 ctx.builder.SetCurrentDebugLocation(linetable.at(debuginfoloc).loc);
             coverageVisitStmt(debuginfoloc);
         }
@@ -8466,7 +8463,7 @@ static jl_llvm_functions_t
         for (auto &I : BB) {
             CallBase *call = dyn_cast<CallBase>(&I);
             if (call) {
-                if (ctx.debug_enabled && !I.getDebugLoc()) {
+                if (debug_enabled && !I.getDebugLoc()) {
                     // LLVM Verifier: inlinable function call in a function with debug info must have a !dbg location
                     // make sure that anything we attempt to call has some inlining info, just in case optimization messed up
                     // (except if we know that it is an intrinsic used in our prologue, which should never have its own debug subprogram)
@@ -8491,7 +8488,7 @@ static jl_llvm_functions_t
                 in_prologue = false;
         }
     }
-    if (ctx.debug_enabled)
+    if (debug_enabled)
         dbuilder.finalize();
 
     if (ctx.vaSlot > 0) {

@@ -819,15 +819,14 @@ for (t, uploc, isunitc) in ((:LowerTriangular, 'L', 'N'),
     end
 end
 
-# Vector multiplication
+# multiplication
 generic_trimatmul!(c::StridedVector{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, b::AbstractVector{T}) where {T<:BlasFloat} =
     BLAS.trmv!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, c === b ? c : copyto!(c, b))
-# Matrix multiplication
 generic_trimatmul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractMatrix{T}) where {T<:BlasFloat} =
     BLAS.trmm!('L', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), A, C === B ? C : copyto!(C, B))
 generic_mattrimul!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix{T}, B::StridedMatrix{T}) where {T<:BlasFloat} =
     BLAS.trmm!('R', uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, one(T), B, C === A ? C : copyto!(C, A))
-# Division
+# division
 generic_trimatdiv!(C::StridedVecOrMat{T}, uploc, isunitc, tfun::Function, A::StridedMatrix{T}, B::AbstractVecOrMat{T}) where {T<:BlasFloat} =
     LAPACK.trtrs!(uploc, tfun === identity ? 'N' : tfun === transpose ? 'T' : 'C', isunitc, A, C === B ? C : copyto!(C, B))
 generic_mattridiv!(C::StridedMatrix{T}, uploc, isunitc, tfun::Function, A::AbstractMatrix{T}, B::StridedMatrix{T}) where {T<:BlasFloat} =
@@ -926,7 +925,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
     end
     if uploc == 'U'
         if isunitc == 'N'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 @inbounds for j in 1:n
                     for i in 1:m
                         Cij = tfun(A[i,i]) * B[i,j]
@@ -948,7 +947,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
                 end
             end
         else # unitc == 'U'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 @inbounds for j in 1:n
                     for i in 1:m
                         Cij = oneunit(eltype(A)) * B[i,j]
@@ -972,7 +971,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
         end
     else # uploc == 'L'
         if isunitc == 'N'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 @inbounds for j in 1:n
                     for i in m:-1:1
                         Cij = tfun(A[i,i]) * B[i,j]
@@ -994,7 +993,7 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
                 end
             end
         else # isunitc == 'U'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 @inbounds for j in 1:n
                     for i in m:-1:1
                         Cij = oneunit(eltype(A)) * B[i,j]
@@ -1019,6 +1018,66 @@ function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
     end
     return C
 end
+# conjugate cases
+function generic_trimatmul!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA::AdjOrTrans, B::AbstractVecOrMat)
+    A = parent(xA)
+    require_one_based_indexing(C, A, B)
+    m, n = size(B, 1), size(B, 2)
+    N = size(A, 1)
+    if m != N
+        throw(DimensionMismatch("right hand side B needs first dimension of size $(size(A,1)), has size $m"))
+    end
+    mc, nc = size(C, 1), size(C, 2)
+    if mc != N || nc != n
+        throw(DimensionMismatch("output has dimensions ($mc,$nc), should have ($N,$n)"))
+    end
+    if uploc == 'U'
+        if isunitc == 'N'
+            @inbounds for j in 1:n
+                for i in 1:m
+                    Cij = conj(A[i,i]) * B[i,j]
+                    for k in i + 1:m
+                        Cij += conj(A[i,k]) * B[k,j]
+                    end
+                    C[i,j] = Cij
+                end
+            end
+        else # unitc == 'U'
+            @inbounds for j in 1:n
+                for i in 1:m
+                    Cij = oneunit(eltype(A)) * B[i,j]
+                    for k in i + 1:m
+                        Cij += conj(A[i,k]) * B[k,j]
+                    end
+                    C[i,j] = Cij
+                end
+            end
+        end
+    else # uploc == 'L'
+        if isunitc == 'N'
+            @inbounds for j in 1:n
+                for i in m:-1:1
+                    Cij = conj(A[i,i]) * B[i,j]
+                    for k in 1:i - 1
+                        Cij += conj(A[i,k]) * B[k,j]
+                    end
+                    C[i,j] = Cij
+                end
+            end
+        else # isunitc == 'U'
+            @inbounds for j in 1:n
+                for i in m:-1:1
+                    Cij = oneunit(eltype(A)) * B[i,j]
+                    for k in 1:i - 1
+                        Cij += conj(A[i,k]) * B[k,j]
+                    end
+                    C[i,j] = Cij
+                end
+            end
+        end
+    end
+    return C
+end
 
 function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     require_one_based_indexing(C, A, B)
@@ -1033,7 +1092,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
     end
     if uploc == 'U'
         if isunitc == 'N'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 @inbounds for i in 1:m
                     for j in n:-1:1
                         Cij = A[i,j] * tfun(B[j,j])
@@ -1055,7 +1114,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
                 end
             end
         else # isunitc == 'U'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 @inbounds for i in 1:m
                     for j in n:-1:1
                         Cij = A[i,j] * oneunit(eltype(B))
@@ -1079,7 +1138,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
         end
     else # uploc == 'L'
         if isunitc == 'N'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 @inbounds for i in 1:m
                     for j in 1:n
                         Cij = A[i,j] * tfun(B[j,j])
@@ -1101,7 +1160,7 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
                 end
             end
         else # unitc == 'U'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 @inbounds for i in 1:m
                     for j in 1:n
                         Cij = A[i,j] * oneunit(eltype(B))
@@ -1120,6 +1179,66 @@ function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
                         end
                         C[i,j] = Cij
                     end
+                end
+            end
+        end
+    end
+    return C
+end
+# conjugate cases
+function generic_mattrimul!(C::AbstractMatrix, uploc, isunitc, ::Function, A::AbstractMatrix, xB::AdjOrTrans)
+    B = parent(xB)
+    require_one_based_indexing(C, A, B)
+    m, n = size(A, 1), size(A, 2)
+    N = size(B, 1)
+    if n != N
+        throw(DimensionMismatch("right hand side B needs first dimension of size $n, has size $N"))
+    end
+    mc, nc = size(C, 1), size(C, 2)
+    if mc != m || nc != N
+        throw(DimensionMismatch("output has dimensions ($mc,$nc), should have ($m,$N)"))
+    end
+    if uploc == 'U'
+        if isunitc == 'N'
+            @inbounds for i in 1:m
+                for j in n:-1:1
+                    Cij = A[i,j] * conj(B[j,j])
+                    for k in 1:j - 1
+                        Cij += A[i,k] * conj(B[k,j])
+                    end
+                    C[i,j] = Cij
+                end
+            end
+        else # isunitc == 'U'
+            @inbounds for i in 1:m
+                for j in n:-1:1
+                    Cij = A[i,j] * oneunit(eltype(B))
+                    for k in 1:j - 1
+                        Cij += A[i,k] * conj(B[k,j])
+                    end
+                    C[i,j] = Cij
+                end
+            end
+        end
+    else # uploc == 'L'
+        if isunitc == 'N'
+            @inbounds for i in 1:m
+                for j in 1:n
+                    Cij = A[i,j] * conj(B[j,j])
+                    for k in j + 1:n
+                        Cij += A[i,k] * conj(B[k,j])
+                    end
+                    C[i,j] = Cij
+                end
+            end
+        else # unitc == 'U'
+            @inbounds for i in 1:m
+                for j in 1:n
+                    Cij = A[i,j] * oneunit(eltype(B))
+                    for k in j + 1:n
+                        Cij += A[i,k] * conj(B[k,j])
+                    end
+                    C[i,j] = Cij
                 end
             end
         end
@@ -1155,7 +1274,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
     C !== B && _uconvert_copyto!(C, B, oneunit(eltype(A)))
     if uploc == 'U'
         if isunitc == 'N'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 for k in 1:n
                     @inbounds for j in m:-1:1
                         ajj = tfun(A[j,j])
@@ -1180,7 +1299,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
                 end
             end
         else # isunitc == 'U'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 for k in 1:n
                     @inbounds for j in m:-1:1
                         Cj = C[j,k]
@@ -1203,7 +1322,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
         end
     else # uploc == 'L'
         if isunitc == 'N'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 for k in 1:n
                     @inbounds for j in 1:m
                         ajj = tfun(A[j,j])
@@ -1228,7 +1347,7 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
                 end
             end
         else # isunitc == 'U'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 for k in 1:n
                     @inbounds for j in 1:m
                         Cj = C[j,k]
@@ -1252,6 +1371,67 @@ function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, tfun::Function,
     end
     return C
 end
+# conjugate cases
+function generic_trimatdiv!(C::AbstractVecOrMat, uploc, isunitc, ::Function, xA::AdjOrTrans, B::AbstractVecOrMat)
+    A = parent(xA)
+    require_one_based_indexing(C, A, B)
+    mA, nA = size(A)
+    m, n = size(B, 1), size(B,2)
+    if nA != m
+        throw(DimensionMismatch("second dimension of left hand side A, $nA, and first dimension of right hand side B, $m, must be equal"))
+    end
+    if size(C) != size(B)
+        throw(DimensionMismatch("size of output, $(size(C)), does not match size of right hand side, $(size(B))"))
+    end
+    oA = oneunit(eltype(A))
+    C !== B && _uconvert_copyto!(C, B, oneunit(eltype(A)))
+    if uploc == 'U'
+        if isunitc == 'N'
+            for k in 1:n
+                @inbounds for j in m:-1:1
+                    ajj = conj(A[j,j])
+                    iszero(ajj) && throw(SingularException(j))
+                    Cj = C[j,k] = _ustrip(ajj) \ C[j,k]
+                    for i in j-1:-1:1
+                        C[i,k] -= _ustrip(conj(A[i,j])) * Cj
+                    end
+                end
+            end
+        else # isunitc == 'U'
+            for k in 1:n
+                @inbounds for j in m:-1:1
+                    Cj = C[j,k]
+                    for i in 1:j-1
+                        C[i,k] -= _ustrip(conj(A[i,j])) * Cj
+                    end
+                end
+            end
+        end
+    else # uploc == 'L'
+        if isunitc == 'N'
+            for k in 1:n
+                @inbounds for j in 1:m
+                    ajj = conj(A[j,j])
+                    iszero(ajj) && throw(SingularException(j))
+                    Cj = C[j,k] = _ustrip(ajj) \ C[j,k]
+                    for i in j+1:m
+                        C[i,k] -= _ustrip(conj(A[i,j])) * Cj
+                    end
+                end
+            end
+        else # isunitc == 'U'
+            for k in 1:n
+                @inbounds for j in 1:m
+                    Cj = C[j,k]
+                    for i in j+1:m
+                        C[i,k] -= _ustrip(conj(A[i,j])) * Cj
+                    end
+                end
+            end
+        end
+    end
+    return C
+end
 
 function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A::AbstractMatrix, B::AbstractMatrix)
     require_one_based_indexing(C, A, B)
@@ -1264,7 +1444,7 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
     end
     if uploc == 'U'
         if isunitc == 'N'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 @inbounds for i in 1:m
                     for j in 1:n
                         Aij = A[i,j]
@@ -1288,7 +1468,7 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
                 end
             end
         else # isunitc == 'U'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 @inbounds for i in 1:m
                     for j in 1:n
                         Aij = A[i,j]
@@ -1312,7 +1492,7 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
         end
     else # uploc == 'L'
         if isunitc == 'N'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 @inbounds for i in 1:m
                     for j in n:-1:1
                         Aij = A[i,j]
@@ -1336,7 +1516,7 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
                 end
             end
         else # isunitc == 'U'
-            if tfun === identity || tfun === conj
+            if tfun === identity
                 @inbounds for i in 1:m
                     for j in n:-1:1
                         Aij = A[i,j]
@@ -1355,6 +1535,65 @@ function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, tfun::Function, A
                         end
                         C[i,j] = Aij / oneunit(eltype(B))
                     end
+                end
+            end
+        end
+    end
+    return C
+end
+function generic_mattridiv!(C::AbstractMatrix, uploc, isunitc, ::Function, A::AbstractMatrix, xB::AdjOrTrans)
+    B = parent(xB)
+    require_one_based_indexing(C, A, B)
+    m, n = size(A)
+    if size(B, 1) != n
+        throw(DimensionMismatch("right hand side B needs first dimension of size $n, has size $(size(B,1))"))
+    end
+    if size(C) != size(A)
+        throw(DimensionMismatch("size of output, $(size(C)), does not match size of left hand side, $(size(A))"))
+    end
+    if uploc == 'U'
+        if isunitc == 'N'
+            @inbounds for i in 1:m
+                for j in 1:n
+                    Aij = A[i,j]
+                    for k in 1:j - 1
+                        Aij -= C[i,k]*conj(B[k,j])
+                    end
+                    iszero(B[j,j]) && throw(SingularException(j))
+                    C[i,j] = Aij / conj(B[j,j])
+                end
+            end
+        else # isunitc == 'U'
+            @inbounds for i in 1:m
+                for j in 1:n
+                    Aij = A[i,j]
+                    for k in 1:j - 1
+                        Aij -= C[i,k]*conj(B[k,j])
+                    end
+                    C[i,j] = Aij / oneunit(eltype(B))
+                end
+            end
+        end
+    else # uploc == 'L'
+        if isunitc == 'N'
+            @inbounds for i in 1:m
+                for j in n:-1:1
+                    Aij = A[i,j]
+                    for k in j + 1:n
+                        Aij -= C[i,k]*conj(B[k,j])
+                    end
+                    iszero(B[j,j]) && throw(SingularException(j))
+                    C[i,j] = Aij / conj(B[j,j])
+                end
+            end
+        else # isunitc == 'U'
+            @inbounds for i in 1:m
+                for j in n:-1:1
+                    Aij = A[i,j]
+                    for k in j + 1:n
+                        Aij -= C[i,k]*conj(B[k,j])
+                    end
+                    C[i,j] = Aij / oneunit(eltype(B))
                 end
             end
         end
@@ -1396,41 +1635,25 @@ for mat in (:AbstractVector, :AbstractMatrix)
     @eval function \(A::Union{UnitUpperTriangular,UnitLowerTriangular}, B::$mat)
         require_one_based_indexing(B)
         TAB = _inner_type_promotion(\, eltype(A), eltype(B))
-        if TAB <: BlasFloat
-            ldiv!(convert(AbstractArray{TAB}, A), copy_similar(B, TAB))
-        else
-            ldiv!(similar(B, TAB, size(B)), A, B)
-        end
+        ldiv!(similar(B, TAB, size(B)), A, B)
     end
     ### Left division with triangle to the left hence rhs cannot be transposed. Quotients.
     @eval function \(A::Union{UpperTriangular,LowerTriangular}, B::$mat)
         require_one_based_indexing(B)
         TAB = _init_eltype(\, eltype(A), eltype(B))
-        if TAB <: BlasFloat
-            ldiv!(convert(AbstractArray{TAB}, A), copy_similar(B, TAB))
-        else
-            ldiv!(similar(B, TAB, size(B)), A, B)
-        end
+        ldiv!(similar(B, TAB, size(B)), A, B)
     end
     ### Right division with triangle to the right hence lhs cannot be transposed. No quotients.
     @eval function /(A::$mat, B::Union{UnitUpperTriangular, UnitLowerTriangular})
         require_one_based_indexing(A)
         TAB = _inner_type_promotion(/, eltype(A), eltype(B))
-        if TAB <: BlasFloat
-            rdiv!(copy_similar(A, TAB), convert(AbstractArray{TAB}, B))
-        else
-            _rdiv!(similar(A, TAB, size(A)), A, B)
-        end
+        _rdiv!(similar(A, TAB, size(A)), A, B)
     end
     ### Right division with triangle to the right hence lhs cannot be transposed. Quotients.
     @eval function /(A::$mat, B::Union{UpperTriangular,LowerTriangular})
         require_one_based_indexing(A)
         TAB = _init_eltype(/, eltype(A), eltype(B))
-        if TAB <: BlasFloat
-            rdiv!(copy_similar(A, TAB), convert(AbstractArray{TAB}, B))
-        else
-            _rdiv!(similar(A, TAB, size(A)), A, B)
-        end
+        _rdiv!(similar(A, TAB, size(A)), A, B)
     end
 end
 ### Multiplication with triangle to the right and hence lhs cannot be transposed.

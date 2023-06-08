@@ -78,8 +78,6 @@ inplace_adj_or_trans(::T) where {T <: AbstractArray} = inplace_adj_or_trans(T)
 inplace_adj_or_trans(::Type{<:AbstractArray}) = copyto!
 inplace_adj_or_trans(::Type{<:Adjoint}) = adjoint!
 inplace_adj_or_trans(::Type{<:Transpose}) = transpose!
-inplace_adj_or_trans(::Type{<:Adjoint{<:Any,<:Transpose}}) = conj!
-inplace_adj_or_trans(::Type{<:Transpose{<:Any,<:Adjoint}}) = conj!
 
 # unwraps Adjoint, Transpose, Symmetric, Hermitian
 _unwrap(A::Adjoint)   = parent(A)
@@ -89,8 +87,6 @@ _unwrap(A::Transpose) = parent(A)
 _unwrap_atc(A) = A
 _unwrap_atc(A::Adjoint)   = parent(A)
 _unwrap_atc(A::Transpose) = parent(A)
-_unwrap_atc(A::Transpose{<:Any,<:Adjoint}) = parent(parent(A))
-_unwrap_atc(A::Adjoint{<:Any,<:Transpose}) = parent(parent(A))
 
 Base.dataids(A::Union{Adjoint, Transpose}) = Base.dataids(A.parent)
 Base.unaliascopy(A::Union{Adjoint,Transpose}) = typeof(A)(Base.unaliascopy(A.parent))
@@ -315,8 +311,6 @@ const AdjOrTransAbsMat{T} = AdjOrTrans{T,<:AbstractMatrix}
 wrapperop(_) = identity
 wrapperop(::Adjoint) = adjoint
 wrapperop(::Transpose) = transpose
-wrapperop(::Adjoint{<:Any,<:Transpose}) = conj
-wrapperop(::Transpose{<:Any,<:Adjoint}) = conj
 
 # the following fallbacks can be removed if Adjoint/Transpose are restricted to AbstractVecOrMat
 size(A::AdjOrTrans) = reverse(size(A.parent))
@@ -333,10 +327,8 @@ IndexStyle(::Type{<:AdjOrTransAbsMat}) = IndexCartesian()
 @propagate_inbounds Base.isassigned(v::AdjOrTransAbsMat, i::Int, j::Int) = isassigned(v.parent, j, i)
 @propagate_inbounds getindex(v::AdjOrTransAbsVec{T}, i::Int) where {T} = wrapperop(v)(v.parent[i-1+first(axes(v.parent)[1])])::T
 @propagate_inbounds getindex(A::AdjOrTransAbsMat{T}, i::Int, j::Int) where {T} = wrapperop(A)(A.parent[j, i])::T
-@propagate_inbounds getindex(A::AdjOrTrans{T,<:AdjOrTransAbsMat}, i::Int, j::Int) where {T} = conj(parent(parent(A))[i, j])::T
 @propagate_inbounds setindex!(v::AdjOrTransAbsVec, x, i::Int) = (setindex!(v.parent, wrapperop(v)(x), i-1+first(axes(v.parent)[1])); v)
 @propagate_inbounds setindex!(A::AdjOrTransAbsMat, x, i::Int, j::Int) = (setindex!(A.parent, wrapperop(A)(x), j, i); A)
-@propagate_inbounds setindex!(A::AdjOrTrans{<:Any,<:AdjOrTransAbsMat}, x, i::Int, j::Int) = (setindex!(parent(parent(A)), conj(x), i, j); A)
 # AbstractArray interface, additional definitions to retain wrapper over vectors where appropriate
 @propagate_inbounds getindex(v::AdjOrTransAbsVec, ::Colon, is::AbstractArray{Int}) = wrapperop(v)(v.parent[is])
 @propagate_inbounds getindex(v::AdjOrTransAbsVec, ::Colon, ::Colon) = wrapperop(v)(v.parent[:])
